@@ -1,5 +1,4 @@
 from parser import parse_tokens
-from  token_class import Token, Tokentype
 from extract_scopes import extract_scopes
 
 text = """
@@ -16,9 +15,6 @@ text = """
     int c = some_func(47, 12)
     print(c)
 """
-
-
-
 
 
 tokens = parse_tokens(text)
