@@ -1,4 +1,3 @@
-
 from token_class import Tokentype, Token
 from recognizer import recognise_token
 
