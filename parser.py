@@ -8,6 +8,7 @@ def parse_tokens(text: str) -> list[Token]:
         if letter == "\n":
             if token := recognise_token(buffer):
                 result.append(token)
+            result.append(Token("\n", Tokentype.newline)) 
             buffer = ""
             continue
         if letter == "(":

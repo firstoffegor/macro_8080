@@ -11,9 +11,7 @@ text = """
         
     int d = x + y
         
-    print(a + b)
-    int c = some_func(47, 12)
-    print(c)
+    
 """
 
 

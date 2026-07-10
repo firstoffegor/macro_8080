@@ -8,6 +8,7 @@ class Tokentype(Enum):
     closed_p = 5
     aop = 6 # Arithmetical OPeration
     type = 7
+    newline = 8
     
 
 class Token:

@@ -2,8 +2,10 @@ from token_class import Token, Tokentype
 
 def recognise_token(buffer: str) -> Token | None:
     result = Token(buffer, Tokentype.variable_name)
-    if buffer in ("\n", ""):
+    if buffer == "":
         return
+    if buffer == "\n":
+        result.token_type = Tokentype.newline
     if buffer in ("int", "str", "float", "bool"):
         result.token_type = Tokentype.type
     elif buffer in "+_**//%":
