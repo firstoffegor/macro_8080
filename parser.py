@@ -8,12 +8,11 @@ def parse_tokens(text: str) -> list[Token]:
         if letter == "\n":
             if token := recognise_token(buffer):
                 result.append(token)
-            result.append(Token("\n", Tokentype.newline)) 
+            result.append(recognise_token("\n")) 
             buffer = ""
             continue
         if letter == "(":
-            if token := recognise_token(buffer):
-                result.append(token)
+            result.append(Token(buffer, Tokentype.func_name))
             result.append(recognise_token("("))
             buffer = ""
             continue
@@ -23,11 +22,24 @@ def parse_tokens(text: str) -> list[Token]:
             result.append(recognise_token(")"))
             buffer = ""
             continue
+        if letter == ",":
+            if token := recognise_token(buffer):
+                result.append(token)
+            result.append(recognise_token(","))
+            buffer = ""
+            continue
+        if letter == ":":
+            if token := recognise_token(buffer):
+                result.append(token)
+            result.append(recognise_token(":"))
+            buffer = ""
+            continue
         if letter == " ":
             if token := recognise_token(buffer):
                 result.append(token)
             buffer = ""
             continue
+        
         buffer += letter
     return result
     
