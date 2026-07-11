@@ -9,6 +9,12 @@ class Tokentype(Enum):
     aop = 6 # Arithmetical OPeration
     type = 7
     newline = 8
+    func_name = 9
+    func = 10
+    comma = 11
+    ret = 12
+    column = 13
+    return_type = 14
     
 
 class Token:
