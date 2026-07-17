@@ -1,20 +1,34 @@
 from parser import parse_tokens
-from extract_scopes import extract_scopes
+from ast import build_program_ast, print_ast
+from token_class import Tokentype
 
 text = """
-    int a = 123
-    int b = 234
-    
-    function some_func(int x, int y) -> int:
-        int a = 3 + x + y
-        return a
-        
-    int d = x + y
-        
-    
+int a = b * c + d
+print(a + y)
 """
 
-
 tokens = parse_tokens(text)
-scopes = extract_scopes(tokens)
-print(scopes)
+
+
+statements = []
+current_statement = []
+
+for token in tokens:
+    if token.token_type == Tokentype.newline:
+        if current_statement:  
+            statements.append(current_statement)
+            current_statement = []
+    else:
+        current_statement.append(token)
+
+
+if current_statement:
+    statements.append(current_statement)
+
+
+program_ast = build_program_ast(statements)
+print_ast(program_ast)
+
+    
+
+
