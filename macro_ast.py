@@ -159,6 +159,24 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
     return None
 
 
+def make_statements_from_tokens(tokens: list[Token]) -> list[list[Token]]:
+    statements = []
+    current_statement = []
+
+    for token in tokens:
+        if token.token_type == Tokentype.newline:
+            if current_statement:  
+                statements.append(current_statement)
+                current_statement = []
+        else:
+            current_statement.append(token)
+
+
+    if current_statement:
+        statements.append(current_statement)
+    return statements
+
+
 def build_program_ast(statements: list[list[Token]]) -> AST:
     """
     Builds a single program AST where root is a 'PROGRAM' node, 
