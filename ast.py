@@ -1,16 +1,21 @@
 from token_class import Token, Tokentype
 
 class Node:
-    def __init__(self, value: str, left=None, right=None, parent=None):
-        self.value = value       # The token name/value (e.g., "=", "+", "a")
-        self.left = left         # Left child Node
-        self.right = right       # Right child Node
-        self.parent = parent     # Reference to parent Node
+    def __init__(self, value: str, token_type: Tokentype, children=None, parent=None):
+        self.value = value           # Token name/value (e.g., "=", "+", "a", "int")
+        self.token_type = token_type # The Tokentype enum
+        self.children = children if children is not None else []
+        self.parent = parent
+
+    def add_child(self, child_node: "Node"):
+        if child_node:
+            child_node.parent = self
+            self.children.append(child_node)
 
     def __repr__(self):
-        if self.left or self.right:
-            return f"Node({self.value}, left={self.left}, right={self.right})"
-        return f"Node({self.value})"
+        if self.children:
+            return f"Node('{self.value}', type={self.token_type.name}, children={len(self.children)})"
+        return f"Node('{self.value}', type={self.token_type.name})"
 
 
 class AST:
@@ -21,50 +26,7 @@ class AST:
         return f"AST(root={self.root})"
 
 
-def print_ast(ast: AST) -> None:
-    """
-    Prints an AST visually using tree-like indentation.
-    """
-    if not ast or not ast.root:
-        print("Empty AST")
-        return
-
-    def _print_node(node: Node, prefix: str = "", is_left: bool = True):
-        if node is None:
-            return
-        
-        # Decide which branch character to draw
-        marker = "├── " if is_left else "└── "
-        
-        # Print the current node's value
-        print(prefix + marker + str(node.value))
-        
-        # Calculate the spacing for the children
-        new_prefix = prefix + ("│   " if is_left else "    ")
-        
-        # Recursively print the children.
-        # We print left first, then right.
-        if node.left or node.right:
-            if node.left:
-                _print_node(node.left, new_prefix, is_left=True)
-            else:
-                print(new_prefix + "├── None")
-                
-            if node.right:
-                _print_node(node.right, new_prefix, is_left=False)
-            else:
-                print(new_prefix + "└── None")
-
-    # Start the recursion from the root node
-    print("AST Tree Structure:")
-    _print_node(ast.root, is_left=False)
-
-
 def build_statement_ast(tokens: list[Token]) -> Node | None:
-    """
-    Parses a single statement (which we know is pre-cleaned of spaces/newlines).
-    Returns the root Node of that statement.
-    """
     if not tokens:
         return None
 
@@ -73,12 +35,13 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
         "*": 2, "/": 2, "//": 2, "%": 2
     }
 
-    # Helper to parse math or value expressions
+    # Helper to parse arithmetic/value sub-trees
     def parse_math_expression(token_list: list[Token]) -> Node | None:
         if not token_list:
             return None
         if len(token_list) == 1:
-            return Node(value=token_list[0].name)
+            t = token_list[0]
+            return Node(value=t.name, token_type=t.token_type)
 
         split_idx = -1
         lowest_prec = float('inf')
@@ -91,46 +54,53 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
                     split_idx = idx
 
         if split_idx != -1:
-            op_node = Node(value=token_list[split_idx].name)
+            op_token = token_list[split_idx]
+            op_node = Node(value=op_token.name, token_type=op_token.token_type)
+            
             left_node = parse_math_expression(token_list[:split_idx])
             right_node = parse_math_expression(token_list[split_idx+1:])
             
-            op_node.left = left_node
-            op_node.right = right_node
-            if left_node: left_node.parent = op_node
-            if right_node: right_node.parent = op_node
+            if left_node:
+                op_node.add_child(left_node)
+            if right_node:
+                op_node.add_child(right_node)
+                
             return op_node
 
-        return Node(value=token_list[0].name)
+        t = token_list[0]
+        return Node(value=t.name, token_type=t.token_type)
 
     # --- STATEMENT ROUTING ---
 
     # 1. Function Definition ("function some_func...")
     if tokens[0].token_type == Tokentype.func:
-        func_name_token = tokens[1]
-        func_node = Node(value=f"def {func_name_token.name}")
+        func_keyword_token = tokens[0]
+        func_node = Node(value=func_keyword_token.name, token_type=func_keyword_token.token_type)
         
-        params = []
+        # Add function name as first child
+        func_name_token = tokens[1]
+        name_node = Node(value=func_name_token.name, token_type=func_name_token.token_type)
+        func_node.add_child(name_node)
+        
+        # Add parameter tokens as subsequent children
         param_idx = 2
         while param_idx < len(tokens) and tokens[param_idx].token_type != Tokentype.closed_p:
             t = tokens[param_idx]
             if t.token_type in (Tokentype.variable_name, Tokentype.type):
-                params.append(t.name)
+                name_node.add_child(Node(value=t.name, token_type=t.token_type))
             param_idx += 1
-            
-        if params:
-            func_node.left = Node(value=f"params: {', '.join(params)}")
-            func_node.left.parent = func_node
             
         return func_node
 
-    # 2. Return Statements ("return a")
+    # 2. Return Statements ("return a + b")
     if tokens[0].token_type == Tokentype.ret:
-        return_node = Node(value=tokens[0].name)
-        expression_node = parse_math_expression(tokens[1:])
-        return_node.right = expression_node
-        if expression_node:
-            expression_node.parent = return_node
+        ret_token = tokens[0]
+        return_node = Node(value=ret_token.name, token_type=ret_token.token_type)
+        
+        expr_node = parse_math_expression(tokens[1:])
+        if expr_node:
+            return_node.add_child(expr_node)
+            
         return return_node
 
     # 3. Variable Assignment / Declaration (Contains "=")
@@ -141,78 +111,85 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
             break
 
     if binding_idx != -1:
-        assignment_node = Node(value="=")
+        bind_token = tokens[binding_idx]
+        assignment_node = Node(value=bind_token.name, token_type=bind_token.token_type)
+        
+        # Left side: Variable target (with type attached as child if declaring)
+        var_token = tokens[binding_idx - 1]
+        var_node = Node(value=var_token.name, token_type=var_token.token_type)
         
         if tokens[0].token_type == Tokentype.type:
-            type_node = Node(value=tokens[0].name)
-            var_node = Node(value=tokens[binding_idx - 1].name)
-            var_node.left = type_node
-            type_node.parent = var_node
-        else:
-            var_node = Node(value=tokens[binding_idx - 1].name)
+            type_token = tokens[0]
+            var_node.add_child(Node(value=type_token.name, token_type=type_token.token_type))
             
-        rhs_tokens = tokens[binding_idx + 1:]
-        if rhs_tokens[0].token_type == Tokentype.func_name:
-            call_node = Node(value=rhs_tokens[0].name)
-            args = [t for t in rhs_tokens[1:] if t.token_type not in (Tokentype.open_p, Tokentype.closed_p, Tokentype.comma)]
-            call_node.right = parse_math_expression(args)
-            if call_node.right:
-                call_node.right.parent = call_node
-            math_expr_node = call_node
-        else:
-            math_expr_node = parse_math_expression(rhs_tokens)
+        assignment_node.add_child(var_node)
         
-        assignment_node.left = var_node
-        assignment_node.right = math_expr_node
-        var_node.parent = assignment_node
-        if math_expr_node:
-            math_expr_node.parent = assignment_node
+        # Right side: Function call or Math Expression
+        rhs_tokens = tokens[binding_idx + 1:]
+        if rhs_tokens and rhs_tokens[0].token_type == Tokentype.func_name:
+            fn_token = rhs_tokens[0]
+            call_node = Node(value=fn_token.name, token_type=fn_token.token_type)
+            args = [t for t in rhs_tokens[1:] if t.token_type not in (Tokentype.open_p, Tokentype.closed_p, Tokentype.comma)]
             
+            expr = parse_math_expression(args)
+            if expr:
+                call_node.add_child(expr)
+            assignment_node.add_child(call_node)
+        else:
+            expr_node = parse_math_expression(rhs_tokens)
+            if expr_node:
+                assignment_node.add_child(expr_node)
+                
         return assignment_node
 
     # 4. Standalone Function Call ("print(...)")
     if tokens[0].token_type == Tokentype.func_name:
-        func_node = Node(value=tokens[0].name)
+        fn_token = tokens[0]
+        func_node = Node(value=fn_token.name, token_type=fn_token.token_type)
+        
         inner_tokens = tokens[2:-1] if tokens[-1].token_type == Tokentype.closed_p else tokens[2:]
         args_tokens = [t for t in inner_tokens if t.token_type != Tokentype.comma]
         
-        func_node.right = parse_math_expression(args_tokens)
-        if func_node.right:
-            func_node.right.parent = func_node
+        expr_node = parse_math_expression(args_tokens)
+        if expr_node:
+            func_node.add_child(expr_node)
+            
         return func_node
 
-    # 5. Non-executable expression fallback
-    print(f"Warning: Standalone expression '{' '.join([t.name for t in tokens])}' ignored.")
     return None
 
 
 def build_program_ast(statements: list[list[Token]]) -> AST:
     """
-    Takes a list of statements (each statement is a list of tokens).
-    Combines them into a single, unified AST.
+    Builds a single program AST where root is a 'PROGRAM' node, 
+    and all statement nodes are direct children in execution order.
     """
     if not statements:
         return AST()
 
-    # Base node representing our program block
-    root_block = Node(value="BLOCK")
-    current_block = root_block
+    # The main root node representing the full program
+    program_root = Node(value="PROGRAM", token_type=Tokentype.func)  # Or custom root token type
 
-    for idx, stmt_tokens in enumerate(statements):
-        # Build the sub-tree for this specific line
-        stmt_root = build_statement_ast(stmt_tokens)
-        if not stmt_root:
-            continue
+    for stmt_tokens in statements:
+        stmt_node = build_statement_ast(stmt_tokens)
+        if stmt_node:
+            program_root.add_child(stmt_node)
+
+    return AST(root=program_root)
+
+def print_ast(ast: AST) -> None:
+    if not ast or not ast.root:
+        print("Empty AST")
+        return
+
+    def _print_node(node: Node, prefix: str = "", is_last: bool = True):
+        marker = "└── " if is_last else "├── "
+        print(f"{prefix}{marker}{node.value} ({node.token_type.name})")
         
-        # The left child of a BLOCK runs the statement
-        current_block.left = stmt_root
-        stmt_root.parent = current_block
+        new_prefix = prefix + ("    " if is_last else "│   ")
+        
+        for i, child in enumerate(node.children):
+            _print_node(child, new_prefix, is_last=(i == len(node.children) - 1))
 
-        # If there are more statements coming, prepare the next block on the right
-        if idx < len(statements) - 1:
-            next_block = Node(value="BLOCK")
-            current_block.right = next_block
-            next_block.parent = current_block
-            current_block = next_block
-
-    return AST(root=root_block)
+    print("AST Tree Structure:")
+    _print_node(ast.root, is_last=True)
