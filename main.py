@@ -1,5 +1,5 @@
 from parser import parse_tokens
-from ast import build_program_ast, print_ast
+from macro_ast import build_program_ast, print_ast
 from token_class import Tokentype
 
 text = """
