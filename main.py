@@ -2,10 +2,7 @@ from parser import parse_tokens
 from macro_ast import build_program_ast, print_ast
 from token_class import Tokentype
 
-text = """
-int a = b * c + d
-print(a + y)
-"""
+text = """fun1(fun2(a + b))\n"""
 
 tokens = parse_tokens(text)
 

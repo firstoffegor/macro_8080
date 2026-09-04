@@ -29,4 +29,21 @@ def test_ast_precedence():
     assert binding.children[1].value == "+"
     assert binding.children[1].children[1].value == "*"
 
+def test_double_function_call():
+    code = "fun1(fun2(a + b))\n"
+    tokens = parse_tokens(code)
+    stmts = make_statements_from_tokens(tokens)
+    ast = build_program_ast(stmts)
+    assert ast.root.children[0].value == "fun1"
+    assert ast.root.children[0].children[0].children[0].children[0].value == "a"
+
+def test_function_call():
+    code = "a = fun1(b + c * d)\n"
+    tokens = parse_tokens(code)
+    stmts = make_statements_from_tokens(tokens)
+    ast = build_program_ast(stmts)
+    assert ast.root.children[0].children[1].children[0].children[1].value == "*"
+    assert ast.root.children[0].children[1].children[0].children[0].value == "b"
+    assert ast.root.children[0].children[0].value == "a"
+
 

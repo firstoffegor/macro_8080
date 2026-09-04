@@ -26,49 +26,104 @@ class AST:
         return f"AST(root={self.root})"
 
 
-def build_statement_ast(tokens: list[Token]) -> Node | None:
-    if not tokens:
+# --- REPLACED: Updated to handle operators, parentheses, and nested function calls ---
+def parse_expression(token_list: list[Token]) -> Node | None:
+    if not token_list:
         return None
+
+    # Strip outer matching parentheses if whole expression is wrapped in them
+    if token_list[0].token_type == Tokentype.open_p and token_list[-1].token_type == Tokentype.closed_p:
+        depth = 0
+        matches = True
+        for idx, t in enumerate(token_list):
+            if t.token_type == Tokentype.open_p:
+                depth += 1
+            elif t.token_type == Tokentype.closed_p:
+                depth -= 1
+            if depth == 0 and idx < len(token_list) - 1:
+                matches = False
+                break
+        if matches:
+            return parse_expression(token_list[1:-1])
 
     PRECEDENCE = {
         "+": 1, "-": 1,
         "*": 2, "/": 2, "//": 2, "%": 2
     }
 
-    # Helper to parse arithmetic/value sub-trees
-    def parse_math_expression(token_list: list[Token]) -> Node | None:
-        if not token_list:
-            return None
-        if len(token_list) == 1:
-            t = token_list[0]
-            return Node(value=t.name, token_type=t.token_type)
+    # 1. Look for binary operators outside of nested parentheses
+    split_idx = -1
+    lowest_prec = float('inf')
+    depth = 0
 
-        split_idx = -1
-        lowest_prec = float('inf')
-        for idx in range(len(token_list) - 1, -1, -1):
-            token = token_list[idx]
-            if token.token_type == Tokentype.aop:
-                prec = PRECEDENCE.get(token.name, 1)
-                if prec < lowest_prec:
-                    lowest_prec = prec
-                    split_idx = idx
+    for idx in range(len(token_list) - 1, -1, -1):
+        token = token_list[idx]
+        if token.token_type == Tokentype.closed_p:
+            depth += 1
+        elif token.token_type == Tokentype.open_p:
+            depth -= 1
+        elif depth == 0 and token.token_type == Tokentype.aop:
+            prec = PRECEDENCE.get(token.name, 1)
+            if prec < lowest_prec:
+                lowest_prec = prec
+                split_idx = idx
 
-        if split_idx != -1:
-            op_token = token_list[split_idx]
-            op_node = Node(value=op_token.name, token_type=op_token.token_type)
+    if split_idx != -1:
+        op_token = token_list[split_idx]
+        op_node = Node(value=op_token.name, token_type=op_token.token_type)
+        
+        left_node = parse_expression(token_list[:split_idx])
+        right_node = parse_expression(token_list[split_idx + 1:])
+        
+        if left_node:
+            op_node.add_child(left_node)
+        if right_node:
+            op_node.add_child(right_node)
             
-            left_node = parse_math_expression(token_list[:split_idx])
-            right_node = parse_math_expression(token_list[split_idx+1:])
-            
-            if left_node:
-                op_node.add_child(left_node)
-            if right_node:
-                op_node.add_child(right_node)
-                
-            return op_node
+        return op_node
 
-        t = token_list[0]
-        return Node(value=t.name, token_type=t.token_type)
+    # 2. Match function calls: func_name(...)
+    if token_list[0].token_type == Tokentype.func_name and len(token_list) > 1 and token_list[1].token_type == Tokentype.open_p:
+        fn_token = token_list[0]
+        func_node = Node(value=fn_token.name, token_type=fn_token.token_type)
+        
+        inner_tokens = token_list[2:-1] if token_list[-1].token_type == Tokentype.closed_p else token_list[2:]
+        
+        # Split args by commas at the top-level depth
+        args_lists = []
+        curr_arg = []
+        depth = 0
+        for t in inner_tokens:
+            if t.token_type == Tokentype.open_p:
+                depth += 1
+                curr_arg.append(t)
+            elif t.token_type == Tokentype.closed_p:
+                depth -= 1
+                curr_arg.append(t)
+            elif t.token_type == Tokentype.comma and depth == 0:
+                if curr_arg:
+                    args_lists.append(curr_arg)
+                    curr_arg = []
+            else:
+                curr_arg.append(t)
+        if curr_arg:
+            args_lists.append(curr_arg)
+
+        for arg_tokens in args_lists:
+            arg_node = parse_expression(arg_tokens)
+            if arg_node:
+                func_node.add_child(arg_node)
+
+        return func_node
+
+    # 3. Base case: single token
+    t = token_list[0]
+    return Node(value=t.name, token_type=t.token_type)
+
+
+def build_statement_ast(tokens: list[Token]) -> Node | None:
+    if not tokens:
+        return None
 
     # --- STATEMENT ROUTING ---
 
@@ -77,12 +132,10 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
         func_keyword_token = tokens[0]
         func_node = Node(value=func_keyword_token.name, token_type=func_keyword_token.token_type)
         
-        # Add function name as first child
         func_name_token = tokens[1]
         name_node = Node(value=func_name_token.name, token_type=func_name_token.token_type)
         func_node.add_child(name_node)
         
-        # Add parameter tokens as subsequent children
         param_idx = 2
         while param_idx < len(tokens) and tokens[param_idx].token_type != Tokentype.closed_p:
             t = tokens[param_idx]
@@ -97,7 +150,7 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
         ret_token = tokens[0]
         return_node = Node(value=ret_token.name, token_type=ret_token.token_type)
         
-        expr_node = parse_math_expression(tokens[1:])
+        expr_node = parse_expression(tokens[1:])
         if expr_node:
             return_node.add_child(expr_node)
             
@@ -114,7 +167,6 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
         bind_token = tokens[binding_idx]
         assignment_node = Node(value=bind_token.name, token_type=bind_token.token_type)
         
-        # Left side: Variable target (with type attached as child if declaring)
         var_token = tokens[binding_idx - 1]
         var_node = Node(value=var_token.name, token_type=var_token.token_type)
         
@@ -124,39 +176,15 @@ def build_statement_ast(tokens: list[Token]) -> Node | None:
             
         assignment_node.add_child(var_node)
         
-        # Right side: Function call or Math Expression
-        rhs_tokens = tokens[binding_idx + 1:]
-        if rhs_tokens and rhs_tokens[0].token_type == Tokentype.func_name:
-            fn_token = rhs_tokens[0]
-            call_node = Node(value=fn_token.name, token_type=fn_token.token_type)
-            args = [t for t in rhs_tokens[1:] if t.token_type not in (Tokentype.open_p, Tokentype.closed_p, Tokentype.comma)]
-            
-            expr = parse_math_expression(args)
-            if expr:
-                call_node.add_child(expr)
-            assignment_node.add_child(call_node)
-        else:
-            expr_node = parse_math_expression(rhs_tokens)
-            if expr_node:
-                assignment_node.add_child(expr_node)
+        # --- MODIFIED: Delegates RHS parsing entirely to parse_expression ---
+        rhs_node = parse_expression(tokens[binding_idx + 1:])
+        if rhs_node:
+            assignment_node.add_child(rhs_node)
                 
         return assignment_node
 
-    # 4. Standalone Function Call ("print(...)")
-    if tokens[0].token_type == Tokentype.func_name:
-        fn_token = tokens[0]
-        func_node = Node(value=fn_token.name, token_type=fn_token.token_type)
-        
-        inner_tokens = tokens[2:-1] if tokens[-1].token_type == Tokentype.closed_p else tokens[2:]
-        args_tokens = [t for t in inner_tokens if t.token_type != Tokentype.comma]
-        
-        expr_node = parse_math_expression(args_tokens)
-        if expr_node:
-            func_node.add_child(expr_node)
-            
-        return func_node
-
-    return None
+    # --- MODIFIED: Route 4 now delegates any standalone statement directly to parse_expression ---
+    return parse_expression(tokens)
 
 
 def make_statements_from_tokens(tokens: list[Token]) -> list[list[Token]]:
@@ -171,22 +199,16 @@ def make_statements_from_tokens(tokens: list[Token]) -> list[list[Token]]:
         else:
             current_statement.append(token)
 
-
     if current_statement:
         statements.append(current_statement)
     return statements
 
 
 def build_program_ast(statements: list[list[Token]]) -> AST:
-    """
-    Builds a single program AST where root is a 'PROGRAM' node, 
-    and all statement nodes are direct children in execution order.
-    """
     if not statements:
         return AST()
 
-    # The main root node representing the full program
-    program_root = Node(value="PROGRAM", token_type=Tokentype.func)  # Or custom root token type
+    program_root = Node(value="PROGRAM", token_type=Tokentype.func)
 
     for stmt_tokens in statements:
         stmt_node = build_statement_ast(stmt_tokens)
@@ -194,6 +216,7 @@ def build_program_ast(statements: list[list[Token]]) -> AST:
             program_root.add_child(stmt_node)
 
     return AST(root=program_root)
+
 
 def print_ast(ast: AST) -> None:
     if not ast or not ast.root:
