@@ -15,6 +15,8 @@ class Tokentype(Enum):
     ret = 12
     column = 13
     return_type = 14
+    tab = 15            # one level of indentation
+    flow_control = 16   # while
     
 
 class Token:
