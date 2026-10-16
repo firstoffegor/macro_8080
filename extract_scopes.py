@@ -40,12 +40,14 @@ def extract_scopes(tokens: list[Token]) -> list[Scope]:
                 expr_elements = []
                 expr_idx = i + 3
                 while expr_idx < len(tokens):
-                    # Stop if we hit a new statement line, a new function, or a return
-                    if tokens[expr_idx].token_type == Tokentype.type or tokens[expr_idx].name in ("function", "return"):
+                    # The expression ends at the end of the line (newline token),
+                    # or at a new declaration / function / return.
+                    if (tokens[expr_idx].token_type in (Tokentype.newline, Tokentype.type)
+                            or tokens[expr_idx].name in ("function", "return")):
                         break
-                    
-                    # CLEANUP: Skip newlines, spaces, or empty tokens entirely
-                    if tokens[expr_idx].name not in ("\n", " ", ""):
+
+                    # Skip spaces or empty tokens entirely
+                    if tokens[expr_idx].name not in (" ", ""):
                         expr_elements.append(tokens[expr_idx].name)
                         
                     expr_idx += 1
@@ -62,7 +64,10 @@ def extract_scopes(tokens: list[Token]) -> list[Scope]:
         # 3. Detect when to return back to global scope
         if token.name == "return" and current_scope != global_scope:
             current_scope = global_scope
-            i += 2
+            # Skip the rest of the return line, not just one token.
+            i += 1
+            while i < len(tokens) and tokens[i].token_type != Tokentype.newline:
+                i += 1
             continue
 
         i += 1
