@@ -6,8 +6,12 @@ def recognise_token(buffer: str) -> Token | None:
         return
     if buffer == "\n":
         result.token_type = Tokentype.newline
+    elif buffer == "\t":
+        result.token_type = Tokentype.tab
     elif buffer == "function":
         result.token_type = Tokentype.func
+    elif buffer == "while":
+        result.token_type = Tokentype.flow_control
     elif buffer == ",":
         result.token_type = Tokentype.comma
     elif buffer == "return":
@@ -18,7 +22,9 @@ def recognise_token(buffer: str) -> Token | None:
         result.token_type = Tokentype.return_type
     elif buffer in ("int", "str", "float", "bool"):
         result.token_type = Tokentype.type
-    elif buffer in "+_**//%":
+    elif buffer in ("+", "-", "*", "/", "//", "**", "%",
+                    "<", ">", "<=", ">=", "==", "!=",
+                    "&&", "and", "||", "or"):
         result.token_type = Tokentype.aop
     elif buffer == "(":
         result.token_type = Tokentype.open_p
@@ -26,7 +32,7 @@ def recognise_token(buffer: str) -> Token | None:
         result.token_type = Tokentype.closed_p
     elif "'" in buffer or '"' in buffer or buffer.isnumeric() or buffer == "True" or buffer == "False" or buffer == "None":
         result.token_type = Tokentype.literal
-    elif "=" in buffer:
+    elif buffer == "=":
         result.token_type = Tokentype.binding
     return result
     
